@@ -522,7 +522,7 @@ function ReplaceModal({ day, currentRecipeId, pool, recipes, onClose, onSelect }
 }
 
 // ── Swipeable Day Row ─────────────────────────────────────────────────────────
-function SwipeDayRow({ entry, recipes, isToday, onRecipeClick, onRemove, onShuffle, onReplace }) {
+function SwipeDayRow({ entry, recipes, isToday, onRecipeClick, onRemove, onShuffle, onReplace, onAdd }) {
   const [offset, setOffset] = useState(0); const [open, setOpen] = useState(false); const startX = useRef(null); const ACTION_W = 180;
   const onTouchStart = e => { startX.current = e.touches[0].clientX; };
   const onTouchMove = e => { if(startX.current===null)return; const dx=e.touches[0].clientX-startX.current; if(dx<0)setOffset(Math.max(dx,-ACTION_W)); };
@@ -547,7 +547,7 @@ function SwipeDayRow({ entry, recipes, isToday, onRecipeClick, onRemove, onShuff
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10,maxWidth:200}}>
           {r?<><span style={{fontSize:12,color:"#444",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.title}</span><FoodImg id={r.id} title={r.title} customImg={r.customImg} style={{width:40,height:40,borderRadius:8,flexShrink:0}} textSize={16}/></>
-            :<span style={{fontSize:13,color:"#ddd"}}>—</span>}
+            :<span onClick={e=>{e.stopPropagation();onAdd&&onAdd(entry.day);}} style={{fontSize:26,color:"#ccc",fontWeight:300,padding:"0 4px",cursor:"pointer"}}>+</span>}
         </div>
       </div>
     </div>
@@ -637,8 +637,37 @@ function RecipeView({ recipe, onBack, onEdit, onSaveComment, collections, onAddT
 }
 
 // ── Week View ─────────────────────────────────────────────────────────────────
-function WeekView({ week, recipes, pool, isNext=false, onBack, onRecipeClick, onUpdateDays, onUpdateComment, onArchive, onActivate }) {
-  const [confirm, setConfirm] = useState(false); const [replaceDay, setReplaceDay] = useState(null);
+function AddToWeekModal({ day, recipes, allRecipes, onClose, onSelect }) {
+  const [search, setSearch] = useState("");
+  const all = Object.values(allRecipes||{}).filter(r=>r.title).sort((a,b)=>a.title.localeCompare(b.title,"sv"));
+  const filtered = search ? all.filter(r=>r.title.toLowerCase().includes(search.toLowerCase())) : all;
+  return (
+    <div style={S.modalBg}>
+      <div style={{...S.modalBox,maxHeight:"85vh",overflowY:"auto"}}>
+        <div style={S.modalHead}>
+          <span style={S.eyebrow}>VÄLJ RECEPT — {day.toUpperCase()}</span>
+          <button onClick={onClose} style={S.iconBtn}>✕</button>
+        </div>
+        <div style={{padding:"12px 20px"}}>
+          <input style={{...S.formInput,fontSize:16}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Sök recept..."/>
+        </div>
+        {filtered.map(r=>(
+          <button key={r.id} onClick={()=>onSelect(day,r.id)} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"10px 20px",borderBottom:"1px solid #F7F4EE",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
+            <FoodImg id={r.id} title={r.title} customImg={r.customImg} style={{width:44,height:44,borderRadius:8,flexShrink:0}} textSize={18}/>
+            <div>
+              <p style={{fontSize:14,color:"#1a1a1a",fontWeight:500,marginBottom:2}}>{r.title}</p>
+              <p style={{fontSize:12,color:"#333"}}>{r.tags?.join(", ")}</p>
+            </div>
+          </button>
+        ))}
+        {filtered.length===0&&<p style={{fontSize:13,color:"#333",padding:"16px 20px"}}>Inga recept hittades.</p>}
+      </div>
+    </div>
+  );
+}
+
+function WeekView({ week, recipes, pool, allRecipes, isNext=false, onBack, onRecipeClick, onUpdateDays, onUpdateComment, onArchive, onActivate }) {
+  const [confirm, setConfirm] = useState(false); const [replaceDay, setReplaceDay] = useState(null); const [addDay, setAddDay] = useState(null);
   const [editComment, setEditComment] = useState(false); const [comment, setComment] = useState(week.comment||"");
   const [showShopping, setShowShopping] = useState(false); const [shoppingSections, setShoppingSections] = useState(null); const [shoppingLoading, setShoppingLoading] = useState(false);
   const handleRemove = day => onUpdateDays(week.days.map(e=>e.day===day?{...e,recipe:null}:e));
@@ -663,6 +692,7 @@ function WeekView({ week, recipes, pool, isNext=false, onBack, onRecipeClick, on
       <button onClick={onBack} style={S.stickyBack}>←</button>
       {showShopping&&<ShoppingToast title={`Handlarlista ${week.label}`} sections={shoppingLoading?null:(shoppingSections||[])} loading={shoppingLoading} onClose={()=>setShowShopping(false)}/>}
       {replaceDay&&<ReplaceModal day={replaceDay} currentRecipeId={week.days.find(e=>e.day===replaceDay)?.recipe?.id} pool={pool} recipes={recipes} onClose={()=>setReplaceDay(null)} onSelect={handleSelect}/>}
+      {addDay&&<AddToWeekModal day={addDay} recipes={recipes} allRecipes={allRecipes} onClose={()=>setAddDay(null)} onSelect={(day,id)=>{handleSelect(day,id);setAddDay(null);}}/>}
       <div style={S.view}>
         <ViewHeader src={ICON_CALENDAR} title={week.label}/>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,marginTop:8}}>
@@ -671,7 +701,7 @@ function WeekView({ week, recipes, pool, isNext=false, onBack, onRecipeClick, on
         </div>
         <p style={{fontSize:13,color:"#1a1a1a",marginBottom:12}}>Svep vänster på en dag för alternativ</p>
         <div style={{borderTop:"1px solid #EAE6DF",margin:"0 -20px"}}>
-          {week.days.map((e,i)=><SwipeDayRow key={e.day} entry={e} recipes={recipes} isToday={!isNext&&i===TODAY_IDX} onRecipeClick={onRecipeClick} onRemove={handleRemove} onShuffle={handleShuffle} onReplace={d=>setReplaceDay(d)}/>)}
+          {week.days.map((e,i)=><SwipeDayRow key={e.day} entry={e} recipes={recipes} isToday={!isNext&&i===TODAY_IDX} onRecipeClick={onRecipeClick} onRemove={handleRemove} onShuffle={handleShuffle} onReplace={d=>setReplaceDay(d)} onAdd={d=>setAddDay(d)}/>)}
         </div>
         <div style={{marginTop:20,marginBottom:24}}><button style={{fontSize:13,color:"#333",border:"1px solid #E8E4DD",padding:"9px 16px",borderRadius:8,background:"#fff",cursor:"pointer"}} onClick={openWeekShopping} disabled={allIngredients.length===0}>🛒 Handlarlista för veckan</button></div>
         <div style={{paddingTop:20,borderTop:"1px solid #F0EDE6"}}>
@@ -811,14 +841,37 @@ function AddCollectionModal({ onClose, onSave, library }) {
   );
 }
 
-function AddToCollectionModal({ col, allRecipes, onClose, onAddRecipe, onAddFolder }) {
+function AddToCollectionModal({ col, allRecipes, onClose, onAddRecipe, onAddFolder, library }) {
   const [tab, setTab] = useState("recipe");
   const [folderName, setFolderName] = useState("");
-  const [folderEmoji, setFolderEmoji] = useState("📁");
+  const [coverImg, setCoverImg] = useState(null);
+  const [showLibPicker, setShowLibPicker] = useState(false);
   const [search, setSearch] = useState("");
+  const fileRef = useRef();
   const existingIds = new Set((col.recipes||[]).map(r=>r.id));
   const available = Object.values(allRecipes).filter(r => r.title && !existingIds.has(r.id));
   const filtered = search ? available.filter(r=>r.title.toLowerCase().includes(search.toLowerCase())) : available;
+
+  if (showLibPicker) return (
+    <div style={S.modalBg}>
+      <div style={{...S.modalBox,maxHeight:"85vh",overflowY:"auto"}}>
+        <div style={S.modalHead}>
+          <button onClick={()=>setShowLibPicker(false)} style={S.iconBtn}>←</button>
+          <span style={S.eyebrow}>VÄLJ BILD</span>
+          <button onClick={onClose} style={S.iconBtn}>✕</button>
+        </div>
+        <div style={{padding:"16px 20px",display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+          {(library||[]).map(img=>(
+            <div key={img.name} onClick={()=>{setCoverImg(img);setShowLibPicker(false);}}
+              style={{cursor:"pointer",borderRadius:10,overflow:"hidden",border:coverImg?.name===img.name?"2px solid #1a1a1a":"2px solid transparent",aspectRatio:"1",background:"#F7F4EE",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <img src={img.src} style={{width:"100%",height:"100%",objectFit:"contain",padding:6}} alt={img.name}/>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div style={S.modalBg}>
       <div style={{...S.modalBox,maxHeight:"85vh",overflowY:"auto"}}>
@@ -829,37 +882,104 @@ function AddToCollectionModal({ col, allRecipes, onClose, onAddRecipe, onAddFold
         <div style={{display:"flex",gap:0,borderBottom:"1px solid #F0EDE6",padding:"0 20px"}}>
           {["recipe","folder"].map(t=>(
             <button key={t} onClick={()=>setTab(t)} style={{fontSize:13,color:tab===t?"#1a1a1a":"#333",padding:"12px 0",marginRight:20,borderBottom:tab===t?"2px solid #1a1a1a":"2px solid transparent",background:"none",border:"none",cursor:"pointer",fontWeight:tab===t?600:400}}>
-              {t==="recipe"?"Recept":"Mapp"}
+              {t==="recipe"?"Recept":"Samling"}
             </button>
           ))}
         </div>
         {tab==="recipe"&&<div style={{padding:"16px 20px"}}>
-          <input style={{...S.formInput,marginBottom:12}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Sök recept…"/>
+          <input style={{...S.formInput,marginBottom:12,fontSize:16}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Sök recept…"/>
           {filtered.length===0&&<p style={{fontSize:13,color:"#333",padding:"8px 0"}}>Inga recept hittades.</p>}
           {filtered.map(r=>(
-            <button key={r.id} onClick={()=>{onAddRecipe(r);onClose();}} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"10px 0",borderBottom:"1px solid #F7F4EE",background:"none",border:"none",cursor:"pointer",borderBottom:"1px solid #F7F4EE",textAlign:"left"}}>
+            <button key={r.id} onClick={()=>{onAddRecipe(r);onClose();}} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"10px 0",borderBottom:"1px solid #F7F4EE",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
               <FoodImg id={r.id} title={r.title} customImg={r.customImg} style={{width:40,height:40,borderRadius:8,flexShrink:0}} textSize={16}/>
               <div><div style={{fontSize:14,color:"#1a1a1a",fontWeight:500}}>{r.title}</div><div style={{fontSize:12,color:"#333"}}>{r.tags?.join(", ")}</div></div>
             </button>
           ))}
         </div>}
         {tab==="folder"&&<div style={{padding:"16px 20px"}}>
-          <div style={{display:"flex",gap:8,marginBottom:12}}>
-            <input style={{...S.formInput,width:56,textAlign:"center",fontSize:22,padding:"8px"}} value={folderEmoji} onChange={e=>setFolderEmoji(e.target.value)} maxLength={2}/>
-            <input style={{...S.formInput,flex:1}} value={folderName} onChange={e=>setFolderName(e.target.value)} placeholder="Mappnamn…"/>
+          <div style={S.formGroup}>
+            <label style={S.formLabel}>Bild</label>
+            {coverImg
+              ? <div style={{position:"relative",marginBottom:10}}>
+                  <img src={coverImg.src} style={{width:"100%",height:120,objectFit:"contain",borderRadius:10,background:"#F7F4EE",border:"1px solid #EAE6DF"}}/>
+                  <button onClick={()=>setCoverImg(null)} style={S.imgRemove}>✕</button>
+                </div>
+              : null}
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <button onClick={()=>fileRef.current.click()} style={{...S.imgUpload,flex:1,padding:"10px 8px",fontSize:12,margin:0}}>📁 Ladda upp</button>
+              <button onClick={()=>setShowLibPicker(true)} style={{...S.imgUpload,flex:1,padding:"10px 8px",fontSize:12,margin:0}}>🖼 Bibliotek</button>
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{
+              const f=e.target.files[0]; if(!f)return;
+              const r=new FileReader(); r.onload=ev=>setCoverImg({name:f.name,src:ev.target.result}); r.readAsDataURL(f);
+            }}/>
           </div>
-          <button style={S.primaryBtn} disabled={!folderName.trim()} onClick={()=>{onAddFolder({id:"c"+Date.now(),title:folderName.trim(),emoji:folderEmoji,sub:[],recipes:[]});onClose();}}>Skapa mapp</button>
+          <div style={S.formGroup}>
+            <label style={S.formLabel}>Namn</label>
+            <input style={{...S.formInput,fontSize:16}} value={folderName} onChange={e=>setFolderName(e.target.value)} placeholder="Samlingsnamn…"/>
+          </div>
+          <button style={S.primaryBtn} disabled={!folderName.trim()} onClick={()=>{
+            onAddFolder({id:"c"+Date.now(),title:folderName.trim(),emoji:"📁",coverImg:coverImg?.src||null,sub:[],recipes:[]});
+            onClose();
+          }}>Skapa samling</button>
         </div>}
       </div>
     </div>
   );
 }
 
-function ColView({ col, onBack, onRecipeClick, onSubClick, allRecipes, onAddRecipe, onAddFolder }) {
+function MoveRecipeModal({ recipe, collections, currentColId, onClose, onMove }) {
+  const flat = (cols) => cols.flatMap(c => [c, ...flat(c.sub||[])]);
+  const all = flat(collections).filter(c => c.id !== currentColId);
+  return (
+    <div style={S.modalBg}>
+      <div style={{...S.modalBox,maxHeight:"75vh",overflowY:"auto"}}>
+        <div style={S.modalHead}>
+          <span style={S.eyebrow}>FLYTTA TILL</span>
+          <button onClick={onClose} style={S.iconBtn}>✕</button>
+        </div>
+        <p style={{fontSize:13,color:"#333",padding:"10px 20px 4px",fontStyle:"italic"}}>{recipe.title}</p>
+        {all.map(col=>(
+          <button key={col.id} onClick={()=>{onMove(col.id);onClose();}}
+            style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"13px 20px",borderBottom:"1px solid #F7F4EE",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
+            <span style={{fontSize:14,color:"#1a1a1a",fontWeight:500}}>{col.emoji||"📁"} {col.title}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ColView({ col, onBack, onRecipeClick, onSubClick, allRecipes, onAddRecipe, onAddFolder, onRemoveRecipe, onMoveRecipe, collections, library }) {
   const [showAdd, setShowAdd] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [movingRecipe, setMovingRecipe] = useState(null);
+  const [showShopping, setShowShopping] = useState(false);
+  const [shoppingSections, setShoppingSections] = useState(null);
+  const [shoppingLoading, setShoppingLoading] = useState(false);
+
+  // Collect all ingredients from this collection recursively
+  const collectIngredients = (c) => {
+    const fromRecipes = (c.recipes||[]).flatMap(r => (allRecipes[r.id]||r).ingredients||[]);
+    const fromSubs = (c.sub||[]).flatMap(s => collectIngredients(s));
+    return [...fromRecipes, ...fromSubs];
+  };
+
+  const openShopping = async () => {
+    setShowShopping(true);
+    if (shoppingSections) return;
+    setShoppingLoading(true);
+    const ings = collectIngredients(col);
+    if (!ings.length) { setShoppingSections([]); setShoppingLoading(false); return; }
+    const cat = await buildWeekShoppingList(ings);
+    setShoppingSections(Object.entries(cat).map(([heading,items])=>({heading,items})));
+    setShoppingLoading(false);
+  };
+
   return (
     <div>
       <button onClick={onBack} style={S.stickyBack}>←</button>
+      {showShopping&&<ShoppingToast title={col.title} sections={shoppingLoading?null:(shoppingSections||[])} loading={shoppingLoading} onClose={()=>setShowShopping(false)}/>}
       {col.coverImg && (
         <div style={{position:"relative",height:200,overflow:"hidden"}}>
           <div style={{position:"absolute",inset:0,backgroundImage:`url(${col.coverImg})`,backgroundSize:"contain",backgroundPosition:"center",backgroundRepeat:"no-repeat",background:col.coverImg?`#F7F4EE url(${col.coverImg}) center/contain no-repeat`:"#F7F4EE"}}/>
@@ -868,91 +988,71 @@ function ColView({ col, onBack, onRecipeClick, onSubClick, allRecipes, onAddReci
       )}
       <div style={S.view}>
         {!col.coverImg&&<div style={{height:20}}/>}
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:24,marginTop:col.coverImg?-20:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:24,marginTop:col.coverImg?-20:0,flexWrap:"wrap"}}>
           <h2 style={{fontFamily:"'Libre Baskerville',serif",fontSize:22,fontWeight:700,color:"#1a1a1a",margin:0,flex:1}}>{col.title}</h2>
-          <button onClick={()=>setShowAdd(true)} style={{background:"#1a1a1a",color:"#F7F4EE",border:"none",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",fontWeight:500}}>+ Lägg till</button>
+          {editMode
+            ? <button onClick={()=>setEditMode(false)} style={{background:"#1a1a1a",color:"#F7F4EE",border:"none",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",fontWeight:600}}>Klar</button>
+            : <div style={{display:"flex",gap:8}}>
+                <button onClick={openShopping} style={{background:"#fff",color:"#1a1a1a",border:"1px solid #E8E4DD",borderRadius:8,padding:"7px 10px",fontSize:13,cursor:"pointer"}}>🛒</button>
+                <button onClick={()=>setEditMode(true)} style={{background:"#fff",color:"#1a1a1a",border:"1px solid #E8E4DD",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer"}}>Redigera</button>
+                <button onClick={()=>setShowAdd(true)} style={{background:"#1a1a1a",color:"#F7F4EE",border:"none",borderRadius:8,padding:"7px 14px",fontSize:13,cursor:"pointer",fontWeight:500}}>+ Lägg till</button>
+              </div>}
         </div>
-        {col.sub?.length>0&&<section style={{marginBottom:28}}><span style={S.eyebrow}>MAPPAR</span><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}>{col.sub.map(s=><ColCard key={s.id} col={s} onClick={onSubClick}/>)}</div></section>}
-        {col.recipes?.length>0&&<section style={{marginBottom:28}}><span style={S.eyebrow}>RECEPT</span><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}>{col.recipes.map(r=><RecipeCard key={r.id} recipe={r} onClick={()=>onRecipeClick(r)}/>)}</div></section>}
+
+        {col.sub?.length>0&&<section style={{marginBottom:28}}>
+          <span style={S.eyebrow}>SAMLINGAR</span>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}>
+            {col.sub.map(s=>(
+              <div key={s.id} style={{position:"relative"}}>
+                <ColCard col={s} onClick={onSubClick} editMode={editMode} onDelete={()=>onRemoveRecipe&&onRemoveRecipe(null,s.id,"sub")}/>
+              </div>
+            ))}
+          </div>
+        </section>}
+
+        {col.recipes?.length>0&&<section style={{marginBottom:28}}>
+          <span style={S.eyebrow}>RECEPT</span>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12}}>
+            {col.recipes.map(r=>{
+              const full = allRecipes[r.id]||r;
+              return (
+                <div key={r.id} style={{position:"relative"}}>
+                  <div onClick={()=>!editMode&&onRecipeClick(full)} style={{cursor:editMode?"default":"pointer",minWidth:0}}>
+                    <FoodImg id={full.id} title={full.title} customImg={full.customImg}
+                      style={{width:"100%",height:120,borderRadius:10,
+                        border:editMode?"2px solid #1a1a1a":"1px solid #EAE6DF",
+                        transform:editMode?"scale(0.96)":"scale(1)",transition:"transform 0.15s",boxSizing:"border-box"}}
+                      textSize={28}/>
+                    <p style={{fontSize:13,color:"#1a1a1a",lineHeight:1.4,marginTop:7,fontWeight:500}}>{full.title}</p>
+                  </div>
+                  {editMode&&(
+                    <div style={{display:"flex",gap:6,marginTop:6,position:"relative",zIndex:10}}>
+                      <button
+                        onTouchEnd={e=>{e.stopPropagation();e.preventDefault();setMovingRecipe(full);}}
+                        onClick={e=>{e.stopPropagation();setMovingRecipe(full);}}
+                        style={{flex:1,fontSize:12,color:"#1a1a1a",border:"1px solid #E8E4DD",borderRadius:6,padding:"8px 4px",background:"#fff",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>Flytta</button>
+                      <button
+                        onTouchEnd={e=>{e.stopPropagation();e.preventDefault();onRemoveRecipe(r.id,null,"recipe");}}
+                        onClick={e=>{e.stopPropagation();onRemoveRecipe(r.id,null,"recipe");}}
+                        style={{flex:1,fontSize:12,color:"#c0392b",border:"1px solid #fdd",borderRadius:6,padding:"8px 4px",background:"#fff",cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>Ta bort</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>}
+
         {!col.sub?.length&&!col.recipes?.length&&<p style={{fontSize:13,color:"#1a1a1a",padding:"20px 0"}}>Inga recept ännu — tryck + Lägg till!</p>}
-        {showAdd&&<AddToCollectionModal col={col} allRecipes={allRecipes} onClose={()=>setShowAdd(false)} onAddRecipe={onAddRecipe} onAddFolder={onAddFolder}/>}
-      </div>
-    </div>
-  );
-}
-
-// ── Veckomat View ─────────────────────────────────────────────────────────────
-function AllRecipesView({ recipes, onBack, onRecipeClick }) {
-  const [search, setSearch] = useState("");
-  const all = Object.values(recipes).filter(r=>r.title).sort((a,b)=>a.title.localeCompare(b.title,"sv"));
-  const filtered = search ? all.filter(r=>r.title.toLowerCase().includes(search.toLowerCase())) : all;
-  return (
-    <div>
-      <button onClick={onBack} style={S.stickyBack}>←</button>
-      <div style={S.view}>
-        <ViewHeader src={ICON_GLOBE} title="Alla recept"/>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,marginTop:8}}>
-          <h2 style={{fontFamily:"'Libre Baskerville',serif",fontSize:22,fontWeight:700,color:"#1a1a1a",margin:0}}>Alla recept</h2>
-        </div>
-        <input style={{...S.formInput,marginBottom:16,fontSize:16}} placeholder="Sök recept..." value={search} onChange={e=>setSearch(e.target.value)}/>
-        <div style={{borderTop:"1px solid #EAE6DF"}}>
-          {filtered.map(r=>(
-            <div key={r.id} onClick={()=>onRecipeClick(r)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #EAE6DF",cursor:"pointer"}}>
-              <FoodImg id={r.id} title={r.title} customImg={r.customImg} style={{width:48,height:48,borderRadius:8,border:"1px solid #EAE6DF",flexShrink:0}} textSize={18}/>
-              <div style={{flex:1,minWidth:0}}>
-                <p style={{fontSize:14,color:"#1a1a1a",fontWeight:500}}>{r.title}</p>
-                <p style={{fontSize:12,color:"#333",marginTop:2}}>{r.tags?.join(", ")}</p>
-              </div>
-              <span style={{color:"#ccc",fontSize:18}}>›</span>
-            </div>
-          ))}
-        </div>
-        {filtered.length===0&&<p style={{fontSize:13,color:"#333",padding:"20px 0"}}>Inga recept hittades.</p>}
-      </div>
-    </div>
-  );
-}
-
-function VeckomatView({ pool, recipes, onBack, onRecipeClick, onRemoveFromPool }) {
-  const [filter, setFilter] = useState("alla");
-  const filtered = filter==="alla"?pool:pool.filter(r=>r.tags?.includes(filter));
-  return (
-    <div>
-      <button onClick={onBack} style={S.stickyBack}>←</button>
-      <div style={S.view}>
-        <ViewHeader src={ICON_MONEY} title="Veckomat"/>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,marginTop:8}}>
-          <h2 style={{fontFamily:"'Libre Baskerville',serif",fontSize:22,fontWeight:700,color:"#1a1a1a",margin:0}}>Veckomat</h2>
-        </div>
-        <p style={{fontSize:13,color:"#333",marginBottom:16}}>Recept som slumpas in i din veckoplanering.</p>
-        <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:16}}>
-          {["alla",...ALL_CATS].map(cat=><button key={cat} onClick={()=>setFilter(cat)} style={{fontSize:12,padding:"5px 12px",borderRadius:12,border:"1px solid #E8E4DD",color:filter===cat?"#1a1a1a":"#333",background:filter===cat?"#F0EDE6":"#fff",flexShrink:0,cursor:"pointer"}}>{cat}</button>)}
-        </div>
-        <div style={{borderTop:"1px solid #EAE6DF"}}>
-          {filtered.map(r=>{
-            const full = recipes[r.id]||r;
-            return (
-              <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #EAE6DF"}}>
-                <div onClick={()=>onRecipeClick(full)} style={{cursor:"pointer",flexShrink:0}}>
-                  <FoodImg id={r.id} title={r.title} customImg={full.customImg} style={{width:52,height:52,borderRadius:8,border:"1px solid #EAE6DF"}} textSize={20}/>
-                </div>
-                <div style={{flex:1,minWidth:0}} onClick={()=>onRecipeClick(full)}>
-                  <p style={{fontSize:14,color:"#1a1a1a",fontWeight:500,marginBottom:3,cursor:"pointer"}}>{r.title}</p>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{r.tags?.map(t=><span key={t} style={S.tagChipSm}>{t}</span>)}</div>
-                </div>
-                <button onClick={()=>onRemoveFromPool(r.id)} style={{fontSize:12,color:"#333",background:"none",border:"1px solid #E8E4DD",borderRadius:6,padding:"4px 8px",cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>Ta bort</button>
-              </div>
-            );
-          })}
-        </div>
-        {filtered.length===0&&<p style={{fontSize:13,color:"#333",padding:"20px 0"}}>Inga recept med den kategorin.</p>}
+        {showAdd&&<AddToCollectionModal col={col} allRecipes={allRecipes} library={library} onClose={()=>setShowAdd(false)} onAddRecipe={onAddRecipe} onAddFolder={onAddFolder}/>}
+        {movingRecipe&&<MoveRecipeModal recipe={movingRecipe} collections={collections||[]} currentColId={col.id} onClose={()=>setMovingRecipe(null)} onMove={targetColId=>onMoveRecipe&&onMoveRecipe(movingRecipe.id,col.id,targetColId)}/>}
       </div>
     </div>
   );
 }
 
 
-// ── Hero + Week Strip ─────────────────────────────────────────────────────────
+
 function Hero({ entry, recipes, weekLabel, onWeekClick, onRecipeClick }) {
   if (!entry?.recipe) return (
     <div style={{height:160,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,borderBottom:"1px solid #EAE6DF",background:"#fff"}}>
@@ -1218,7 +1318,6 @@ export default function App() {
       <main style={{paddingBottom:110}}>{render()}</main>
       {showAddCollection&&<AddCollectionModal
         onClose={()=>setShowAddCollection(false)}
-        library={library}
         onSave={col=>{
           setData(d=>({...d, collections:[...d.collections, col]}));
           setShowAddCollection(false);
