@@ -1,15 +1,36 @@
 exports.handler = async (event) => {
+  console.log("Function called:", event.httpMethod);
+
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+      },
+      body: "",
+    };
+  }
+
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
+  console.log("API key exists:", !!apiKey);
+
   if (!apiKey) {
-    return { statusCode: 500, body: JSON.stringify({ error: "API key not configured" }) };
+    return {
+      statusCode: 500,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ error: "API key not configured" }),
+    };
   }
 
   try {
     const body = JSON.parse(event.body);
+    console.log("Calling Anthropic, model:", body.model);
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -21,6 +42,7 @@ exports.handler = async (event) => {
       body: JSON.stringify(body),
     });
 
+    console.log("Anthropic status:", response.status);
     const data = await response.json();
 
     return {
@@ -32,8 +54,10 @@ exports.handler = async (event) => {
       body: JSON.stringify(data),
     };
   } catch (error) {
+    console.error("Error:", error.message);
     return {
       statusCode: 500,
+      headers: { "Access-Control-Allow-Origin": "*" },
       body: JSON.stringify({ error: error.message }),
     };
   }
