@@ -75,7 +75,7 @@ async function askAI(messages, system="", signal=null) {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       signal,
-      body: JSON.stringify({ model:"claude-sonnet-4-5-20251001", max_tokens:1000, system, messages }),
+      body: JSON.stringify({ model:"claude-sonnet-4-5-20250929", max_tokens:1000, system, messages }),
     });
     if(!res.ok) { console.error("API error:", res.status, await res.text()); return ""; }
     const data = await res.json();
@@ -157,7 +157,7 @@ async function importFromImageBase64(base64, mimeType, signal) {
     const res = await fetch(url, {
       method:"POST", headers:{"Content-Type":"application/json"},
       signal: effectiveSignal,
-      body: JSON.stringify({ model:"claude-sonnet-4-5-20251001", max_tokens:1500,
+      body: JSON.stringify({ model:"claude-sonnet-4-5-20250929", max_tokens:1500,
         system:`Läs av receptet i bilden. Returnera ENDAST JSON: { title, servings, ingredients (array), instructions (array) }`,
         messages:[{ role:"user", content:[{ type:"image", source:{ type:"base64", media_type:mimeType, data:base64 }},{ type:"text", text:"Läs av receptet." }]}],
       }),
