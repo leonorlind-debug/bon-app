@@ -468,7 +468,7 @@ function ImportModal({ onClose, onImported, library, collections }) {
         {step==="menu"&&<>
           <div style={S.modalHead}><span style={S.eyebrow}>IMPORTERA RECEPT</span><button onClick={onClose} style={S.iconBtn}>✕</button></div>
           <div style={{paddingBottom:16}}>
-            {[{icon:"🖼",label:"Importera bild",sub:"Foto på kokbokssida",action:()=>fileRef.current.click()},{icon:"📷",label:"Ta en bild",sub:"Använd kameran",action:()=>cameraRef.current.click()},{icon:"🔗",label:"Importera länk",sub:"Webbsida eller Instagram",action:()=>setStep("url")},{icon:"📋",label:"Klistra in text",sub:"Kopiera text från webbsida eller app",action:()=>setStep("paste")},
+            {[{icon:"🖼",label:"Importera bild",sub:"Foto på kokbokssida",action:()=>fileRef.current.click()},{icon:"📷",label:"Ta en bild",sub:"Använd kameran",action:()=>cameraRef.current.click()},{icon:"🔗",label:"Importera länk",sub:"Webbsida eller Instagram",action:()=>setStep("url")},{icon:"📋",label:"Klistra in text",sub:"Bäst för Instagram & köket.se — kopiera texten och klistra in",action:()=>setStep("paste")},
               {icon:"✏️",label:"Skriv in manuellt",sub:"Fyll i själv",action:()=>setStep("manual")}].map(item=>(
               <button key={item.label} onClick={item.action} style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"14px 20px",textAlign:"left",borderBottom:"1px solid #F7F4EE",background:"none",border:"none",cursor:"pointer",borderBottom:"1px solid #F7F4EE"}}>
                 <span style={{fontSize:22,flexShrink:0}}>{item.icon}</span>
@@ -483,7 +483,7 @@ function ImportModal({ onClose, onImported, library, collections }) {
         {(step==="paste")&&<>
           <div style={S.modalHead}><button onClick={()=>setStep("menu")} style={S.iconBtn}>←</button><span style={S.eyebrow}>KLISTRA IN TEXT</span><button onClick={onClose} style={S.iconBtn}>✕</button></div>
           <div style={{padding:"16px 20px 20px"}}>
-            <textarea style={{...S.formInput,height:160,resize:"none",marginBottom:12}} placeholder="Klistra in recepttext här — fungerar med Instagram, matbloggar m.m." value={url} onChange={e=>setUrl(e.target.value)}/>
+            <textarea style={{...S.formInput,height:160,resize:"none",marginBottom:12}} placeholder="1. Öppna receptsidan (t.ex. köket.se eller Instagram)&#10;2. Markera all recepttext&#10;3. Kopiera (Cmd+C)&#10;4. Klistra in här (Cmd+V)" value={url} onChange={e=>setUrl(e.target.value)}/>
             <button style={S.primaryBtn} disabled={!url.trim()} onClick={async()=>{
               setStep("loading"); setError("");
               const text = await askAI([{role:"user",content:"Extrahera receptet från denna text:\n\n"+url.slice(0,4000)}], "Returnera ENDAST ett JSON-objekt (ingen markdown): { title, servings, ingredients (array), instructions (array) }");
@@ -1371,6 +1371,31 @@ export default function App() {
             ))}
           </div>
         </section>
+
+        {/* Export button */}
+        <div style={{padding:"32px 0 16px",textAlign:"center"}}>
+          <button onClick={()=>{
+            const exportData = {
+              version: "kokbok_v5",
+              exportedAt: new Date().toISOString(),
+              recipes: data.recipes,
+              collections: data.collections,
+              veckomatPool: data.veckomatPool,
+              activeWeek: data.activeWeek,
+              nextWeek: data.nextWeek,
+            };
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], {type:"application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `bonapp-backup-${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }} style={{fontSize:12,color:"#333",background:"none",border:"1px solid #E8E4DD",borderRadius:8,padding:"8px 16px",cursor:"pointer"}}>
+            ↓ Exportera receptdata
+          </button>
+        </div>
+
       </div>
     );
     if(cur.type==="week") return <WeekView week={data.activeWeek} recipes={data.recipes} pool={data.veckomatPool} allRecipes={data.recipes} onBack={pop} onRecipeClick={openRecipe} onUpdateDays={handleUpdateDays} onUpdateComment={handleUpdateComment} onArchive={handleArchive}/>;
